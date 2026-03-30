@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Wanderly Pro",
+    "slug": "wanderly-pro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "wanderly",
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
