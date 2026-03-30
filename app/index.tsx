@@ -1,29 +1,36 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export default function Index() {
+  const router = useRouter();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>🌍 Wanderly Pro</Text>
-      <Text style={styles.subtitle}>Your AI Travel Assistant</Text>
+      <TouchableOpacity
+        style={styles.chatButton}
+        onPress={() => router.push('/chat/assistant')}
+      >
+        <Text style={styles.chatButtonText}>Open AI Assistant Chat</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#4F46E5' 
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
   },
-  title: { 
-    fontSize: 32, 
-    fontWeight: 'bold', 
-    color: '#fff' 
+  chatButton: {
+    backgroundColor: '#4F46E5',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 24,
   },
-  subtitle: { 
-    fontSize: 16, 
-    color: '#E0E7FF', 
-    marginTop: 10 
+  chatButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
