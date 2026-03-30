@@ -1,6 +1,3 @@
-// app/chat/assistant.tsx
-// Assistant chat component for Wanderly
-
 import { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -12,9 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { openaiService } from '@/services/api/openai';
+import { amadeusService } from '@/services/api/amadeus';
+import { hotelService } from '@/services/api/hotels';
 
 interface Message {
   id: string;
@@ -22,6 +23,7 @@ interface Message {
   sender: 'user' | 'ai';
   timestamp: Date;
   suggestions?: string[];
+  data?: any;
 }
 
 export default function AssistantScreen() {
@@ -38,6 +40,247 @@ export default function AssistantScreen() {
         'Plan a 7-day Italy trip',
         'Best beaches in Bali',
       ],
+    },
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const handleSendMessage = async (text: string) => {    if (!text.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text,
+      sender: 'user',
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInputText('');
+    setIsLoading(true);
+
+    try {
+      // Get AI response
+      const aiResponse = await openaiService.chat([
+        { role: 'user', content: text }
+      ]);
+
+      // Generate suggestions
+      const suggestions = await openaiService.generateSuggestions(text);
+
+      // Check if user wants to search flights/hotels
+      let flightData = null;
+      let hotelData = null;
+
+      if (text.toLowerCase().includes('flight') || text.toLowerCase().includes('fly')) {
+        // Extract destination and search flights
+        flightData = await amadeusService.searchFlights({
+          origin: 'NYC',
+          destination: 'PAR',
+          departureDate: '2026-04-15',
+          adults: 1
+        });
+      }
+
+      if (text.toLowerCase().includes('hotel')) {
+        hotelData = await hotelService.searchHotels({
+          cityCode: 'PAR',
+          checkIn: '2026-04-15',
+          checkOut: '2026-04-18',
+          adults: 2
+        });
+      }
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: aiResponse + (flightData ? `\n\n✈️ Found ${flightData.length} flights!` : '') + (hotelData ? `\n\n🏨 Found ${hotelData.length} hotels!` : ''),
+        sender: 'ai',
+        timestamp: new Date(),        suggestions: suggestions.length > 0 ? suggestions : undefined,
+        data: { flights: flightData, hotels: hotelData }
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to get response. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSuggestionPress = (suggestion: string) => {
+    handleSendMessage(suggestion);
+  };
+
+  useEffect(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  }, [messages]);
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Wanderly AI</Text>
+          <Text style={styles.headerSubtitle}>Always here to help</Text>
+        </View>
+        <TouchableOpacity style={styles.settingsButton}>
+          <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.messagesContainer}
+        contentContainerStyle={styles.messagesContent}
+      >
+        {messages.map((message) => (
+          <View key={message.id}>
+            <View
+              style={[
+                styles.messageBubble,
+                message.sender === 'user' ? styles.userBubble : styles.aiBubble,
+              ]}            >
+              <Text style={[styles.messageText, message.sender === 'user' ? styles.userText : styles.aiText]}>
+                {message.text}
+              </Text>
+              <Text style={styles.timestamp}>
+                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+
+            {message.suggestions && message.sender === 'ai' && (
+              <View style={styles.suggestionsContainer}>
+                {message.suggestions.map((suggestion, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.suggestionChip}
+                    onPress={() => handleSuggestionPress(suggestion)}
+                  >
+                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        ))}
+
+        {isLoading && (
+          <View style={[styles.messageBubble, styles.aiBubble]}>
+            <ActivityIndicator size="small" color="#4F46E5" />
+            <Text style={styles.aiText}> Wanderly is thinking...</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      <View style={styles.inputContainer}>
+        <TouchableOpacity style={styles.micButton}>
+          <Ionicons name="mic" size={24} color="#fff" />
+        </TouchableOpacity>
+
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type or speak your message..."
+            placeholderTextColor="#9CA3AF"
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+            onSubmitEditing={() => handleSendMessage(inputText)}
+          />
+          <TouchableOpacity
+            onPress={() => handleSendMessage(inputText)}            disabled={!inputText.trim()}
+            style={styles.sendButton}
+          >
+            <Ionicons name="send" size={20} color={inputText.trim() ? '#fff' : '#9CA3AF'} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  header: {
+    backgroundColor: '#4F46E5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 60 : 12,
+  },
+  backButton: { padding: 8 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  headerSubtitle: { color: '#C7D2FE', fontSize: 12 },
+  settingsButton: { padding: 8 },
+  messagesContainer: { flex: 1 },
+  messagesContent: { padding: 16, paddingBottom: 20 },
+  messageBubble: {
+    maxWidth: '85%',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#4F46E5',
+    borderBottomRightRadius: 4,
+  },
+  aiBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3F4F6',
+    borderBottomLeftRadius: 4,
+  },
+  messageText: { fontSize: 15, lineHeight: 22 },
+  userText: { color: '#fff' },
+  aiText: { color: '#111827' },
+  timestamp: { fontSize: 11, color: '#9CA3AF', marginTop: 6 },
+  suggestionsContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16, gap: 8 },  suggestionChip: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#4F46E5',
+  },
+  suggestionText: { color: '#4F46E5', fontSize: 14, fontWeight: '500' },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#fff',
+    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+  },
+  micButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#4F46E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  input: { flex: 1, fontSize: 16, color: '#111827', maxHeight: 100 },
+  sendButton: { marginLeft: 8, padding: 8 },
+});
     },
   ]);
   const [inputText, setInputText] = useState('');
